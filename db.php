@@ -1,6 +1,4 @@
-
 <?php
-
 function env_value(string $key, string $default = ''): string
 {
     // First, read environment variables provided by Railway or the OS.
