@@ -38,7 +38,7 @@ $pageTitle = 'Report ' . ucfirst($type) . ' Item'; require __DIR__ . '/header.ph
     </div>
     <label>Location<input name="location" list="locs" value="<?= h($v['location']) ?>" placeholder="e.g. Library, Canteen" required>
       <datalist id="locs"><option>Library</option><option>Canteen</option><option>Main Building</option><option>Computer Lab</option><option>Sports Ground</option><option>Hostel</option><option>Bus Stop</option></datalist></label>
-    <label>Photo (optional, JPG/PNG/WEBP/GIF, max 2 MB)<input type="file" name="photo" accept="image/*" id="photo"></label>
+    <label>Photo (optional, JPG/PNG/WEBP/GIF, max 20 MB)<input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/gif" id="photo"></label>
     <img id="preview" class="preview" alt="" hidden>
     <button class="btn" type="submit">Submit report</button>
   </form>
