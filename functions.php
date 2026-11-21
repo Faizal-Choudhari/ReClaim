@@ -28,6 +28,8 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
 
     session_start();
+    error_log('ReClaim session ID: ' . session_id());
+error_log('ReClaim CSRF token: ' . ($_SESSION['csrf'] ?? 'NOT CREATED'));
 }
 
 // Database connection
