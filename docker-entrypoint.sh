@@ -9,10 +9,11 @@ if [ -d /app/uploads ] && [ ! -L /app/uploads ]; then
     cp -an /app/uploads/. /var/data/uploads/ 2>/dev/null || true
     rm -rf /app/uploads
 fi
+
 if [ ! -L /app/uploads ]; then
     ln -s /var/data/uploads /app/uploads
 fi
 
-# Database is created automatically by db.php on the first web request.
-exec php -d upload_max_filesize=4M -d post_max_size=6M \
+# Start PHP server with configured upload limits.
+exec php -d upload_max_filesize=20M -d post_max_size=32M \
     -S "0.0.0.0:${PORT:-10000}" -t /app
