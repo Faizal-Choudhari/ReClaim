@@ -1,7 +1,8 @@
 <?php
 session_set_cookie_params([
     'httponly' => true,
-    'samesite' => 'Lax'
+    'samesite' => 'Lax',
+    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'
 ]);
 
 if (session_status() === PHP_SESSION_NONE) {

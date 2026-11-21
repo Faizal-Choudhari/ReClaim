@@ -12,3 +12,5 @@ RUN chmod +x /app/docker-entrypoint.sh
 ENV PORT=10000
 EXPOSE 10000
 CMD ["/app/docker-entrypoint.sh"]
+
+RUN printf "upload_max_filesize=20M\npost_max_size=25M\nmemory_limit=256M\nmax_execution_time=120\nmax_input_time=120\ndisplay_errors=Off\nlog_errors=On\n" > /usr/local/etc/php/conf.d/uploads.ini
