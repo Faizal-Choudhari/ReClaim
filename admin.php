@@ -34,7 +34,7 @@ $pageTitle = 'Admin'; require __DIR__ . '/header.php';
 </div>
 <div class="card"><div class="table-wrap">
 <?php if ($tab === 'users'): $rows = $pdo->query('SELECT * FROM users ORDER BY created_at DESC')->fetchAll(); ?>
-  <table><tr><th>Name</th><th>USN</th><th>Contact</th><th>Email</th><th>Role</th><th>Joined</th><th>Actions</th></tr>
+  <table><tr><th>Name</th><th>Password</th><th>Contact</th><th>Email</th><th>Role</th><th>Joined</th><th>Actions</th></tr>
   <?php foreach ($rows as $r): ?>
     <tr><td><?= h($r['name']) ?></td><td><?= h($r['usn'] ?? 'N/A') ?></td><td><?= h($r['phone'] ?? 'N/A') ?></td><td><?= h($r['email']) ?></td><td><?= h($r['role']) ?></td><td><?= h(date('d M Y', strtotime($r['created_at']))) ?></td>
     <td><?php if ((int)$r['id'] !== (int)$me['id']): ?>
