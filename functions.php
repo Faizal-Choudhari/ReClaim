@@ -1,15 +1,41 @@
 <?php
-session_set_cookie_params([
-    'httponly' => true,
-    'samesite' => 'Lax',
-    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'
-]);
+
+/**
+ * ReClaim - Common Functions
+ * Session, authentication, CSRF, uploads and claims.
+ */
+
+// --------------------------------------------------
+// SESSION INITIALIZATION
+// --------------------------------------------------
 
 if (session_status() === PHP_SESSION_NONE) {
+
+    $isHttps = (
+        (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ||
+        (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')
+    );
+
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+
     session_start();
 }
 
+// Database connection
 require_once __DIR__ . '/db.php';
+
+// --------------------------------------------------
+// CATEGORIES
+// --------------------------------------------------
 
 const CATEGORIES = [
     'Electronics',
@@ -24,8 +50,16 @@ const CATEGORIES = [
     'Other'
 ];
 
+// --------------------------------------------------
+// GENERAL FUNCTIONS
+// --------------------------------------------------
+
 function h($s): string {
-    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars(
+        (string)$s,
+        ENT_QUOTES,
+        'UTF-8'
+    );
 }
 
 function redirect(string $url): never {
@@ -37,18 +71,27 @@ function flash(string $msg, string $type = 'success'): void {
     $_SESSION['flash'][] = [$msg, $type];
 }
 
+// --------------------------------------------------
+// USER AUTHENTICATION
+// --------------------------------------------------
+
 function current_user(): ?array {
+
     static $user = false;
 
     if ($user === false) {
+
         $user = null;
 
         if (!empty($_SESSION['uid'])) {
+
             $st = db()->prepare(
-                'SELECT id, name, email, usn, phone, role FROM users WHERE id = ?'
+                'SELECT id, name, email, usn, phone, role
+                 FROM users WHERE id = ?'
             );
 
             $st->execute([$_SESSION['uid']]);
+
             $user = $st->fetch() ?: null;
         }
     }
@@ -57,10 +100,13 @@ function current_user(): ?array {
 }
 
 function require_login(): array {
+
     $u = current_user();
 
     if (!$u) {
+
         flash('Please log in first.', 'error');
+
         redirect('login.php');
     }
 
@@ -68,46 +114,74 @@ function require_login(): array {
 }
 
 function require_admin(): array {
+
     $u = require_login();
 
     if ($u['role'] !== 'admin') {
+
         http_response_code(403);
+
         exit('Access denied: administrators only.');
     }
 
     return $u;
 }
 
+// --------------------------------------------------
+// CSRF PROTECTION
+// --------------------------------------------------
+
 function csrf_token(): string {
+
     if (empty($_SESSION['csrf'])) {
-        $_SESSION['csrf'] = bin2hex(random_bytes(32));
+
+        $_SESSION['csrf'] = bin2hex(
+            random_bytes(32)
+        );
     }
 
     return $_SESSION['csrf'];
 }
 
 function csrf_field(): string {
+
     return '<input type="hidden" name="csrf" value="' .
-        h(csrf_token()) . '">';
+        h(csrf_token()) .
+        '">';
 }
 
 function csrf_check(): void {
-    if (!hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf'] ?? '')) {
+
+    $sessionToken = $_SESSION['csrf'] ?? '';
+
+    $formToken = $_POST['csrf'] ?? '';
+
+    if (
+        !is_string($sessionToken) ||
+        !is_string($formToken) ||
+        $sessionToken === '' ||
+        $formToken === '' ||
+        !hash_equals($sessionToken, $formToken)
+    ) {
+
         http_response_code(400);
-        exit('Invalid form token. Go back, refresh the page and try again.');
+
+        exit(
+            'Invalid form token. Please refresh the page and try again.'
+        );
     }
 }
 
-/**
- * Validate and save an uploaded photo.
- * Maximum file size: 20 MB.
- * Returns file name or null if no file was uploaded.
- * Throws RuntimeException on error.
- */
+// --------------------------------------------------
+// PHOTO UPLOAD
+// Maximum size: 20 MB
+// --------------------------------------------------
+
 function handle_upload(string $field): ?string {
 
+    // No photo uploaded
     if (
-        empty($_FILES[$field]) ||
+        !isset($_FILES[$field]) ||
         $_FILES[$field]['error'] === UPLOAD_ERR_NO_FILE
     ) {
         return null;
@@ -115,9 +189,14 @@ function handle_upload(string $field): ?string {
 
     $f = $_FILES[$field];
 
+    // Check upload errors
     if ($f['error'] !== UPLOAD_ERR_OK) {
-        if ($f['error'] === UPLOAD_ERR_INI_SIZE ||
-            $f['error'] === UPLOAD_ERR_FORM_SIZE) {
+
+        if (
+            $f['error'] === UPLOAD_ERR_INI_SIZE ||
+            $f['error'] === UPLOAD_ERR_FORM_SIZE
+        ) {
+
             throw new RuntimeException(
                 'Photo must be 20 MB or smaller.'
             );
@@ -128,15 +207,28 @@ function handle_upload(string $field): ?string {
         );
     }
 
-    // Maximum upload size: 20 MB
+    // Validate file size
     if ($f['size'] > 20 * 1024 * 1024) {
+
         throw new RuntimeException(
             'Photo must be 20 MB or smaller.'
         );
     }
 
-    // Validate actual image MIME type
-    $mime = (new finfo(FILEINFO_MIME_TYPE))->file($f['tmp_name']);
+    // Validate temporary file
+    if (
+        !is_uploaded_file($f['tmp_name']) ||
+        !is_readable($f['tmp_name'])
+    ) {
+
+        throw new RuntimeException(
+            'Invalid uploaded photo.'
+        );
+    }
+
+    // Validate MIME type
+    $mime = (new finfo(FILEINFO_MIME_TYPE))
+        ->file($f['tmp_name']);
 
     $types = [
         'image/jpeg' => 'jpg',
@@ -145,23 +237,32 @@ function handle_upload(string $field): ?string {
         'image/gif'  => 'gif'
     ];
 
+    // Validate actual image content
     if (
         !isset($types[$mime]) ||
         @getimagesize($f['tmp_name']) === false
     ) {
+
         throw new RuntimeException(
             'Only JPG, PNG, WEBP or GIF images are allowed.'
         );
     }
 
-    // Generate a unique filename
-    $name = bin2hex(random_bytes(12)) . '.' . $types[$mime];
+    // Generate unique filename
+    $name = bin2hex(random_bytes(12)) .
+        '.' . $types[$mime];
 
-    // Ensure uploads directory exists
+    // Upload directory
     $uploadDir = __DIR__ . '/uploads/';
 
+    // Create directory if missing
     if (!is_dir($uploadDir)) {
-        if (!mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+
+        if (
+            !mkdir($uploadDir, 0755, true) &&
+            !is_dir($uploadDir)
+        ) {
+
             throw new RuntimeException(
                 'Could not create the uploads directory.'
             );
@@ -169,7 +270,13 @@ function handle_upload(string $field): ?string {
     }
 
     // Save uploaded photo
-    if (!move_uploaded_file($f['tmp_name'], $uploadDir . $name)) {
+    if (
+        !move_uploaded_file(
+            $f['tmp_name'],
+            $uploadDir . $name
+        )
+    ) {
+
         throw new RuntimeException(
             'Could not save the photo.'
         );
@@ -178,23 +285,42 @@ function handle_upload(string $field): ?string {
     return $name;
 }
 
+// --------------------------------------------------
+// DELETE PHOTO
+// --------------------------------------------------
+
 function delete_photo(?string $file): void {
 
     if (
         $file &&
-        preg_match('/^[a-f0-9]{24}\.(jpg|png|webp|gif)$/', $file)
+        preg_match(
+            '/^[a-f0-9]{24}\.(jpg|png|webp|gif)$/',
+            $file
+        )
     ) {
-        @unlink(__DIR__ . '/uploads/' . $file);
+
+        @unlink(
+            __DIR__ . '/uploads/' . $file
+        );
     }
 }
 
-/**
- * Approve or reject a claim.
- * Approving marks the item as claimed and rejects other pending claims.
- */
-function set_claim_status(int $claimId, string $status): void {
+// --------------------------------------------------
+// CLAIM APPROVAL / REJECTION
+// --------------------------------------------------
 
-    if (!in_array($status, ['approved', 'rejected'], true)) {
+function set_claim_status(
+    int $claimId,
+    string $status
+): void {
+
+    if (
+        !in_array(
+            $status,
+            ['approved', 'rejected'],
+            true
+        )
+    ) {
         return;
     }
 
@@ -216,22 +342,33 @@ function set_claim_status(int $claimId, string $status): void {
 
     try {
 
+        // Update selected claim
         $pdo->prepare(
             'UPDATE claims SET status = ? WHERE id = ?'
-        )->execute([$status, $claimId]);
+        )->execute([
+            $status,
+            $claimId
+        ]);
 
         if ($status === 'approved') {
 
+            // Reject other pending claims
             $pdo->prepare(
                 "UPDATE claims
                  SET status = 'rejected'
                  WHERE item_id = ?
                  AND id <> ?
                  AND status = 'pending'"
-            )->execute([$itemId, $claimId]);
+            )->execute([
+                $itemId,
+                $claimId
+            ]);
 
+            // Mark item as claimed
             $pdo->prepare(
-                "UPDATE items SET status = 'claimed' WHERE id = ?"
+                "UPDATE items
+                 SET status = 'claimed'
+                 WHERE id = ?"
             )->execute([$itemId]);
         }
 
@@ -247,6 +384,10 @@ function set_claim_status(int $claimId, string $status): void {
     }
 }
 
+// --------------------------------------------------
+// DELETE ITEM
+// --------------------------------------------------
+
 function delete_item(int $id): void {
 
     $st = db()->prepare(
@@ -255,8 +396,12 @@ function delete_item(int $id): void {
 
     $st->execute([$id]);
 
-    delete_photo($st->fetchColumn() ?: null);
+    $photo = $st->fetchColumn();
 
+    // Delete associated photo
+    delete_photo($photo ?: null);
+
+    // Delete database record
     db()->prepare(
         'DELETE FROM items WHERE id = ?'
     )->execute([$id]);
