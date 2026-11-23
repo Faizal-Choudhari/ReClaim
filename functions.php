@@ -87,10 +87,7 @@ function current_user(): ?array {
 
         if (!empty($_SESSION['uid'])) {
 
-            $st = db()->prepare(
-                'SELECT id, name, email, usn, phone, role
-                 FROM users WHERE id = ?'
-            );
+            $st = db()->prepare( 'SELECT id, name, email, usn, phone, role FROM users WHERE id = ?');
 
             $st->execute([$_SESSION['uid']]);
 
